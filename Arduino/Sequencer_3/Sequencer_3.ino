@@ -180,6 +180,7 @@ void loop()
 void write_LED()
 {
   int state = 0;
+  int step_colour = 3;
    
   for (int i_seq = 0; i_seq < max_seq; i_seq++) {
     for (int i_col = 0; i_col < max_col; i_col++) {  
@@ -191,9 +192,9 @@ void write_LED()
         
            
         if (((i_col == (step_num % max_step)+1) && (step_num / max_step == active_page[i_seq]) && (active_channel[i_seq] < max_midi_channel)) || (i_col == 9 && i_row == active_audio_page[i_seq])){    //highlight the active step column and page
-          Tlc.set_p(column_map[i_col][R] + i_row*32, colour_map[i_seq][1][R], i_seq);
-          Tlc.set_p(column_map[i_col][G] + i_row*32, colour_map[i_seq][1][G], i_seq);
-          Tlc.set_p(column_map[i_col][B] + i_row*32, colour_map[i_seq][1][B], i_seq);
+          Tlc.set_p(column_map[i_col][R] + i_row*32, colour_map[i_seq][step_colour][R], i_seq);
+          Tlc.set_p(column_map[i_col][G] + i_row*32, colour_map[i_seq][step_colour][G], i_seq);
+          Tlc.set_p(column_map[i_col][B] + i_row*32, colour_map[i_seq][step_colour][B], i_seq);
         }
         
       }
@@ -530,9 +531,9 @@ void set_active_channel(int ac_seq, int ac_row) {
   byte state_val = 0;
   for (int i_page = 0; i_page < max_page; i_page++){
     for (int i_row = 0; i_row < max_row; i_row++) {
-      state_val = 2;          //disable all other channels
+      state_val = 0;          //disable all other channels
       if (i_row == ac_row) {  
-        state_val = 4;        //activeate the new channel
+        state_val = 4;        //activate the new channel
       }
       state_ctrl[ac_seq][active_channel[ac_seq]][i_page][i_row][0] = state_val;
     }
@@ -629,8 +630,8 @@ void colour_map_init() {
   colour_map[0][3][G] = 0;
   colour_map[0][3][B] = 100;
   
-  colour_map[0][4][R] = 100;
-  colour_map[0][4][G] = 100;
+  colour_map[0][4][R] = 50;
+  colour_map[0][4][G] = 0;
   colour_map[0][4][B] = 100;
   
   
