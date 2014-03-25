@@ -1,0 +1,1 @@
+Place this TLC5940 folder in the \Arduino\libraries\ folder
