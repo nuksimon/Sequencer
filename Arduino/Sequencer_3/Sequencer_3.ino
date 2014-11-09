@@ -487,7 +487,7 @@ void read_buttons(){
                 } else if (active_page[i_seq] == pg_prob) {    //prob
                   set_seq_prob(i_seq, i_row, i_col);
                 } else if (active_page[i_seq] == 7) {          //clear
-                
+                  clear_page(i_seq, i_row, i_col);
                 }
               
               } else {              
@@ -634,10 +634,18 @@ void pick_next_seq(){
       active_seq = 2;
     }
   }
-  
 }
 
 
+
+//clears an entire page
+void clear_page(int i_seq, int i_ch, int i_page){
+  for (int i_row = 0; i_row < max_row; i_row++) {
+    for (int i_col = 1; i_col < max_col-1; i_col++) {
+      state_ctrl[i_seq][i_ch][i_page][i_row][i_col] = 0;
+    }
+  }
+}
 
 
 
