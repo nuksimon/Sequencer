@@ -1,4 +1,12 @@
 /*
+  ARDUINO STEP SEQUENCER
+  2013-10-20
+  Simon Nuk
+*/
+
+
+/*
+--- Mapping for TLC library -------------------------------------------------
 
     -  +5V from Arduino -> TLC pin 21 and 19     (VCC and DCPRG)
     -  GND from Arduino -> TLC pin 22 and 27     (GND and VPRG)
@@ -17,6 +25,8 @@
 
 #include "Tlc5940.h"
 
+
+// -------- DEFINE CONSTANTS & VARIABLES -----------------------------------------------------
 
 const byte RUN_LED_TEST = 0;
 const byte RUN_NORMAL = 1;
@@ -47,21 +57,22 @@ const byte pin_button_reg_load = 5;   //74LS165 pin 1, shift/load (was 40)
 const byte pin_button_reg_in[3] = {4, 3, 2};     //74LS165 pin 9, output Qh (was 42,43,44)
 
 
-byte button_map[max_row * max_col][2];            //maps the serial stream of button states to their row/column index
-byte column_map[max_col][max_rgb];              //LED column to LED driver chip column for RGB. column_map[col][rgb] -> chip column
+byte button_map[max_row * max_col][2];              //maps the serial stream of button states to their row/column index
+byte column_map[max_col][max_rgb];                  //LED column to LED driver chip column for RGB. column_map[col][rgb] -> chip column
 short colour_map[max_seq][max_state_val][max_rgb];  //state_val to rbg intensity for each seq.  colour_map[seq][state_val][rgb] -> rgb intensity (colour)
 byte midi_map[max_row];                              //row to MIDI offset
 
 boolean button_state[max_seq][max_row][max_col];  //current state of each button
 
 byte state_ctrl[max_seq][max_channel][max_page][max_row][max_col];  //state of each grid element (visible and non). state_ctrl[seq][channel][page][row][col] -> state_val
-byte active_channel[max_seq];        //active channel to be displayed on each seq
-byte active_page[max_seq];        //active page to be displayed on each seq
+byte active_channel[max_seq];           //active channel to be displayed on each seq
+byte active_page[max_seq];              //active page to be displayed on each seq
 byte active_audio_page[max_seq];        //active page to be played on each seq
-byte seq_steps[max_seq];        //number of steps on each seq
-int active_seq = 0;                //seq that is playing sound
-boolean flag_pause = false;        //play/pause button
-boolean flag_freeze[max_seq];      //freeze/follow button
+byte seq_steps[max_seq];                //number of steps on each seq
+byte seq_prob[max_seq][max_seq];         //probability to switch to the next sequencer
+int active_seq = 0;                    //seq that is playing sound
+boolean flag_pause = false;            //play/pause button
+boolean flag_freeze[max_seq];          //freeze/follow button
 
 float start_time;
 float total_time;
@@ -75,6 +86,14 @@ byte step_num;
 int step_period;
 byte max_step = 8;
 boolean state_change;
+
+
+// -----------------------------------------------------------------------------------------------------------
+
+
+
+
+
 
 void setup()
 {
@@ -115,6 +134,7 @@ void loop()
         step_num = step_num + 1;
         if (step_num >= seq_steps[active_seq]){
           //select the next seq   < -------------------------------------------------
+          pick_next_seq();
           step_num = 0;      //reset the step counter
         }
         active_audio_page[active_seq] = step_num / max_step; 
@@ -157,21 +177,22 @@ void loop()
         test_LED(i, i_row);
         delay(1000);
       }
-    }*/
-    
+    }*/    
     for (int i = 1; i < 4 ; i++) {
       test_LED(i, max_row);
       delay(5000);   
-    }
-       
+    }       
     //test_LED(7, max_row);
     //delay(2000);
   }
 
-
 }
 
 
+
+
+// --------------------------------------------------------------------------------------------------------
+//
 // --------------------------------------------------------------------------------------------------------
 
 
@@ -262,6 +283,7 @@ void test_LED(byte led_colour, int led_row)
 
 
 
+// ---------- INIT functions --------------------------------------------------
 
 void flag_freeze_init() {
   for (int i_seq = 0; i_seq < max_seq; i_seq++){
@@ -272,6 +294,18 @@ void flag_freeze_init() {
 void seq_steps_init() {
   for (int i_seq = 0; i_seq < max_seq; i_seq++){
     set_seq_steps(i_seq, 0, 8);
+  }
+}
+
+void seq_prob_init() {
+  for (int i_seq = 0; i_seq < max_seq; i_seq++){
+    for (int i_seq_dest = 0; i_seq_dest < max_seq; i_seq_dest++){
+      if (i_seq == i_seq_dest) {
+        set_seq_prob(i_seq, i_seq_dest, 7);
+      } else {
+        set_seq_prob(i_seq, i_seq_dest, 0);
+      }
+    }
   }
 }
 
@@ -328,11 +362,10 @@ void state_ctrl_init() {
 }
 
 
+// --------------------------------------------------------------------------------
+
 
 void send_MIDI_out() {
-  
-  
-  
   for (int i_channel = 0; i_channel < max_midi_channel; i_channel++){
     for (int i_row = 0; i_row < max_row; i_row++){
       if (state_ctrl[active_seq][i_channel][active_audio_page[active_seq]][i_row][(step_num % max_step)+1] >0) {
@@ -451,8 +484,8 @@ void read_buttons(){
                   set_tempo(i_seq, i_row, i_col);
                 } else if (active_page[i_seq] == pg_step) {    //steps
                   set_seq_steps(i_seq, i_row, i_col);
-                } else if (active_page[i_seq] == 2) {          //prob
-                
+                } else if (active_page[i_seq] == pg_prob) {    //prob
+                  set_seq_prob(i_seq, i_row, i_col);
                 } else if (active_page[i_seq] == 7) {          //clear
                 
                 }
@@ -475,6 +508,32 @@ void read_buttons(){
   }
         
 }
+
+
+
+
+
+// ---- Set Menu Parameters ----------------------------------------------------------------
+
+//update the probability of switching to the next sequencer
+void set_seq_prob(int i_seq, int i_row, int s_col) {
+  boolean flag_found = false;
+
+  for (int i_col = 1; i_col < max_col-1; i_col++) {
+    if (flag_found == false) {        //turn on the LEDs until we reach the desired value
+      state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 1;
+    } else {
+      state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 0;
+    }
+         
+    if (i_col == s_col) {  //we have reached the desired value
+      flag_found = true;
+    }
+  }
+  
+  seq_prob[i_seq][i_row] = s_col;   //update the global parameter
+}
+
 
 //update the number of steps on a given seq
 void set_seq_steps(int i_seq, int s_row, int s_col) {
@@ -542,14 +601,41 @@ void set_active_channel(int ac_seq, int ac_row) {
 }
 
 
-
 void toggle_button_clk(){
   digitalWrite(pin_button_reg_clk,HIGH);
   digitalWrite(pin_button_reg_clk,LOW);
 }
 
 
-
+//picks the next sequencer based on the probability array
+void pick_next_seq(){
+  int i_seq = active_seq;
+  int tot_prob = 0;
+  float prob_val = 0;
+  
+  if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][1] == 0 && seq_prob[i_seq][2] == 0){
+    //check if the probability is programmed.  if not, continue with the same sequencer
+    active_seq = active_seq;
+  } else if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][1] == 0){
+    active_seq = 2;
+  } else if (seq_prob[i_seq][1] == 0 && seq_prob[i_seq][2] == 0){
+    active_seq = 0;
+  } else if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][2] == 0){
+    active_seq = 1;
+  } else {
+    tot_prob = seq_prob[i_seq][0] + seq_prob[i_seq][2] + seq_prob[i_seq][3];
+    prob_val = random(tot_prob);
+    
+    if (prob_val < seq_prob[i_seq][0]) {
+      active_seq = 0;
+    } else if (prob_val < seq_prob[i_seq][1]) {
+      active_seq = 1;
+    } else {
+      active_seq = 2;
+    }
+  }
+  
+}
 
 
 
