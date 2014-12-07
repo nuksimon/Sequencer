@@ -106,6 +106,7 @@ void setup()
   button_map_init();
   button_init();
   seq_steps_init();
+  seq_prob_init();
   tempo_init();
   flag_freeze_init();
   midi_map_init();
@@ -212,7 +213,7 @@ void write_LED()
         Tlc.set_p(column_map[i_col][B] + i_row*32, colour_map[i_seq][state_ctrl[i_seq][active_channel[i_seq]][active_page[i_seq]][i_row][i_col]][B], i_seq); 
         
            
-        if (((i_col == (step_num % max_step)+1) && (step_num / max_step == active_page[i_seq]) && (active_channel[i_seq] < max_midi_channel)) || (i_col == 9 && i_row == active_audio_page[i_seq])){    //highlight the active step column and page
+        if ((((i_col == (step_num % max_step)+1) && (step_num / max_step == active_page[i_seq]) && (active_channel[i_seq] < max_midi_channel)) || (i_col == 9 && i_row == active_audio_page[i_seq])) && i_seq == active_seq){    //highlight the active step column and page
           Tlc.set_p(column_map[i_col][R] + i_row*32, colour_map[i_seq][step_colour][R], i_seq);
           Tlc.set_p(column_map[i_col][G] + i_row*32, colour_map[i_seq][step_colour][G], i_seq);
           Tlc.set_p(column_map[i_col][B] + i_row*32, colour_map[i_seq][step_colour][B], i_seq);
@@ -300,10 +301,10 @@ void seq_steps_init() {
 void seq_prob_init() {
   for (int i_seq = 0; i_seq < max_seq; i_seq++){
     for (int i_seq_dest = 0; i_seq_dest < max_seq; i_seq_dest++){
-      if (i_seq == i_seq_dest) {
-        set_seq_prob(i_seq, i_seq_dest, 7);
+      if (i_seq_dest == 0) {      
+        set_seq_prob(i_seq, i_seq_dest, 8);      //all point to seq0
       } else {
-        set_seq_prob(i_seq, i_seq_dest, 0);
+        set_seq_prob(i_seq, i_seq_dest, 1);
       }
     }
   }
@@ -519,19 +520,21 @@ void read_buttons(){
 void set_seq_prob(int i_seq, int i_row, int s_col) {
   boolean flag_found = false;
 
-  for (int i_col = 1; i_col < max_col-1; i_col++) {
-    if (flag_found == false) {        //turn on the LEDs until we reach the desired value
-      state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 1;
-    } else {
-      state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 0;
+  if (i_row < max_seq) {
+    for (int i_col = 1; i_col < max_col-1; i_col++) {
+      if (flag_found == false) {        //turn on the LEDs until we reach the desired value
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 1;
+      } else {
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 0;
+      }
+           
+      if (i_col == s_col) {  //we have reached the desired value
+        flag_found = true;
+      }
     }
-         
-    if (i_col == s_col) {  //we have reached the desired value
-      flag_found = true;
-    }
+    
+    seq_prob[i_seq][i_row] = s_col;   //update the global parameter
   }
-  
-  seq_prob[i_seq][i_row] = s_col;   //update the global parameter
 }
 
 
@@ -613,22 +616,22 @@ void pick_next_seq(){
   int tot_prob = 0;
   float prob_val = 0;
   
-  if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][1] == 0 && seq_prob[i_seq][2] == 0){
+  if (seq_prob[i_seq][0] <= 1 && seq_prob[i_seq][1] <= 1 && seq_prob[i_seq][2] <= 1){
     //check if the probability is programmed.  if not, continue with the same sequencer
     active_seq = active_seq;
-  } else if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][1] == 0){
+  } else if (seq_prob[i_seq][0] <= 1 && seq_prob[i_seq][1] <= 1){
     active_seq = 2;
-  } else if (seq_prob[i_seq][1] == 0 && seq_prob[i_seq][2] == 0){
+  } else if (seq_prob[i_seq][1] <= 1 && seq_prob[i_seq][2] <= 1){
     active_seq = 0;
-  } else if (seq_prob[i_seq][0] == 0 && seq_prob[i_seq][2] == 0){
+  } else if (seq_prob[i_seq][0] <= 1 && seq_prob[i_seq][2] <= 1){
     active_seq = 1;
   } else {
-    tot_prob = seq_prob[i_seq][0] + seq_prob[i_seq][2] + seq_prob[i_seq][3];
+    tot_prob = seq_prob[i_seq][0] + seq_prob[i_seq][2] + seq_prob[i_seq][3] - 3;
     prob_val = random(tot_prob);
     
-    if (prob_val < seq_prob[i_seq][0]) {
+    if (prob_val < seq_prob[i_seq][0]-1) {
       active_seq = 0;
-    } else if (prob_val < seq_prob[i_seq][1]) {
+    } else if (prob_val < seq_prob[i_seq][1]-1) {
       active_seq = 1;
     } else {
       active_seq = 2;
