@@ -70,6 +70,7 @@ byte active_page[max_seq];              //active page to be displayed on each se
 byte active_audio_page[max_seq];        //active page to be played on each seq
 byte seq_steps[max_seq];                //number of steps on each seq
 byte seq_prob[max_seq][max_seq];         //probability to switch to the next sequencer
+byte seq_rand[max_seq][max_midi_channel];  //randomization parameter for each channel
 int active_seq = 0;                    //seq that is playing sound
 boolean flag_pause = false;            //play/pause button
 boolean flag_freeze[max_seq];          //freeze/follow button
@@ -107,6 +108,7 @@ void setup()
   button_init();
   seq_steps_init();
   seq_prob_init();
+  seq_rand_init();
   tempo_init();
   flag_freeze_init();
   midi_map_init();
@@ -142,7 +144,8 @@ void loop()
         if (flag_freeze[active_seq] == false && active_channel[active_seq] < max_midi_channel) {
           active_page[active_seq] = step_num / max_step;  //move to the appropriate page
         }
-                
+        
+        add_random_note(step_num);        //apply the randomize function
         send_MIDI_out();
                 
         step_start = step_start + step_period;
@@ -306,6 +309,14 @@ void seq_prob_init() {
       } else {
         set_seq_prob(i_seq, i_seq_dest, 1);
       }
+    }
+  }
+}
+
+void seq_rand_init() {
+  for (int i_seq = 0; i_seq < max_seq; i_seq++){
+    for (int i_ch = 0; i_ch < max_midi_channel; i_ch++){    
+      set_seq_rand(i_seq, i_ch, 1);      //all set to 0
     }
   }
 }
@@ -485,8 +496,12 @@ void read_buttons(){
                   set_tempo(i_seq, i_row, i_col);
                 } else if (active_page[i_seq] == pg_step) {    //steps
                   set_seq_steps(i_seq, i_row, i_col);
-                } else if (active_page[i_seq] == pg_prob) {    //prob
-                  set_seq_prob(i_seq, i_row, i_col);
+                } else if (active_page[i_seq] == pg_prob) {    //prob/rand
+                  if (i_row < max_channel) {
+                    set_seq_prob(i_seq, i_row, i_col);  //prob
+                  } else {
+                    set_seq_rand(i_seq, i_row-5, i_col); //rand 
+                  }
                 } else if (active_page[i_seq] == 7) {          //clear
                   clear_page(i_seq, i_row, i_col);
                 }
@@ -534,6 +549,28 @@ void set_seq_prob(int i_seq, int i_row, int s_col) {
     }
     
     seq_prob[i_seq][i_row] = s_col;   //update the global parameter
+  }
+}
+
+
+//update the random note parameter
+void set_seq_rand(int i_seq, int i_row, int s_col) {
+  boolean flag_found = false;
+
+  if (i_row < max_seq && i_row >= 0) {
+    for (int i_col = 1; i_col < max_col-1; i_col++) {
+      if (flag_found == false) {        //turn on the LEDs until we reach the desired value
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 1;
+      } else {
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 0;
+      }
+           
+      if (i_col == s_col) {  //we have reached the desired value
+        flag_found = true;
+      }
+    }
+    
+    seq_rand[i_seq][i_row] = s_col;   //update the global parameter
   }
 }
 
@@ -639,6 +676,24 @@ void pick_next_seq(){
   }
 }
 
+
+//add a random note to the sequence
+void add_random_note(int step_num){
+  float rand_val;
+  byte rand_note;
+  for (int i_ch = 0; i_ch < max_midi_channel; i_ch++) {
+
+    rand_val = seq_rand[active_seq][i_ch];
+    if (random(max_step) < rand_val && rand_val > 1){    //pick a random number between 0 and 8 and compare to the randomize param
+      rand_note = random(max_row);
+      if (state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] == 0){    //swap the current state
+        state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] = 1;
+      } else {
+        state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] = 0;
+      }
+    }
+  }
+}
 
 
 //clears an entire page
