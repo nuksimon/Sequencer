@@ -45,12 +45,13 @@ const byte max_state_val = 5;
 const byte max_page = 4;  //4
 const byte max_channel = 4;
 const byte max_midi_channel = 3;
+const byte max_random = 2;
 
 const byte ch_menu = 3;
 const byte pg_tempo = 0;
 const byte pg_step = 1;
 const byte pg_prob = 2;
-const byte pg_clear = 7;
+const byte pg_clear = 3;
 
 const byte pin_button_reg_clk = 6;    //74LS165 pin 2, clk (was 41)
 const byte pin_button_reg_load = 5;   //74LS165 pin 1, shift/load (was 40)
@@ -145,7 +146,7 @@ void loop()
           active_page[active_seq] = step_num / max_step;  //move to the appropriate page
         }
         
-        add_random_note(step_num);        //apply the randomize function
+        add_random_note(step_num+1);        //apply the randomize function
         send_MIDI_out();
                 
         step_start = step_start + step_period;
@@ -560,9 +561,9 @@ void set_seq_rand(int i_seq, int i_row, int s_col) {
   if (i_row < max_seq && i_row >= 0) {
     for (int i_col = 1; i_col < max_col-1; i_col++) {
       if (flag_found == false) {        //turn on the LEDs until we reach the desired value
-        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 1;
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row+5][i_col] = 1;
       } else {
-        state_ctrl[i_seq][ch_menu][pg_prob][i_row][i_col] = 0;
+        state_ctrl[i_seq][ch_menu][pg_prob][i_row+5][i_col] = 0;
       }
            
       if (i_col == s_col) {  //we have reached the desired value
@@ -681,13 +682,22 @@ void pick_next_seq(){
 void add_random_note(int step_num){
   float rand_val;
   byte rand_note;
+  byte note_count;
   for (int i_ch = 0; i_ch < max_midi_channel; i_ch++) {
 
     rand_val = seq_rand[active_seq][i_ch];
-    if (random(max_step) < rand_val && rand_val > 1){    //pick a random number between 0 and 8 and compare to the randomize param
+    if (random(4*max_step) < rand_val && rand_val > 1){    //pick a random number between 0 and 8 and compare to the randomize param
       rand_note = random(max_row);
+      if (rand_note == max_row){rand_note = max_row-1;}
       if (state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] == 0){    //swap the current state
-        state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] = 1;
+        //check to see if we have too many states enabled
+        note_count = 0;
+        for (int i_row = 1; i_row <= max_row; i_row++){
+          note_count = note_count + state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][i_row][step_num];
+        }
+        if (note_count < max_random*4) { 
+          state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] = 4;
+        }
       } else {
         state_ctrl[active_seq][i_ch][active_audio_page[active_seq]][rand_note][step_num] = 0;
       }
@@ -711,14 +721,14 @@ void clear_page(int i_seq, int i_ch, int i_page){
 
 void midi_map_init() {
   //major pentatonic
-  midi_map[0] = -5;     //5th below
-  midi_map[1] = -3;    //6th
-  midi_map[2] = 0;    //root
-  midi_map[3] = 2;    
-  midi_map[4] = 4;    //maj 3rd
-  midi_map[5] = 7;    //5th
-  midi_map[6] = 9;
-  midi_map[7] = 12;  //octave
+  midi_map[7] = -5;     //5th below
+  midi_map[6] = -3;    //6th
+  midi_map[5] = 0;    //root
+  midi_map[4] = 2;    
+  midi_map[3] = 4;    //maj 3rd
+  midi_map[2] = 7;    //5th
+  midi_map[1] = 9;
+  midi_map[0] = 12;  //octave
 }
 
 
